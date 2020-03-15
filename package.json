@@ -1,5 +1,6 @@
 {
-  "name": "parcel",
+  "name": "client-side-routing",
+  "author": "Daniel van der Meijden",
   "version": "1.0.0",
   "main": "dist/bundle.js",
   "scripts": {
