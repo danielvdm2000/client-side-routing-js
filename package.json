@@ -1,0 +1,13 @@
+{
+  "name": "parcel",
+  "version": "1.0.0",
+  "main": "dist/bundle.js",
+  "scripts": {
+    "watch": "parcel watch src/index.ts",
+    "build": "parcel build src/index.ts"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "parcel": "^2.0.0-alpha.3.2"
+  }
+}
