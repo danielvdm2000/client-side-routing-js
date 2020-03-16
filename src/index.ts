@@ -2,7 +2,7 @@ import ICachedAssets from './interfaces/ICachedAssets';
 
 const cachedPages: ICachedAssets = {};
 const cachedStylesheets: ICachedAssets = {};
-// const cachedScripts: ICachedAssets = {};
+const cachedScripts: ICachedAssets = {};
 
 main();
 function main(): void {
@@ -13,7 +13,7 @@ function main(): void {
 
   // Add current page to cache
   if (!(location.href in cachedPages)) {
-    cachedPages[location.href] = inlineAllDependencies(document.documentElement);
+    cachedPages[location.href] = inlineAllStyles(document.documentElement);
   }
 
   // Override the anchor click events
@@ -47,43 +47,30 @@ function customAnchorClickEvent(this: HTMLAnchorElement, event: MouseEvent): voi
   }
 }
 
-async function inlineAllDependencies(dom: HTMLElement) {
-  dom = await fetchAndInject(dom, 'link[rel="stylesheet"]', 'style', 'href', cachedStylesheets);
-  //dom = await fetchAndInject(dom, 'script[src]', 'script', 'src', cachedScripts);
+async function inlineAllStyles(dom: HTMLElement): Promise<string> {
+  const stylesheets: Array<HTMLLinkElement> = Array.from(
+    dom.querySelectorAll('link[rel="stylesheet"]')
+  );
 
-  return dom.innerHTML;
-}
-
-async function fetchAndInject(
-  dom: HTMLElement,
-  selector: string,
-  newElementType: string,
-  src: string,
-  cache: ICachedAssets = {}
-): Promise<HTMLElement> {
-  const elements: Array<HTMLElement> = Array.from(dom.querySelectorAll(selector));
-
-  // Load the elements data
-  const elementsData: Array<string> = await Promise.all(
-    elements.map(element => {
-      const href = element[src];
-
-      if (!(href in cache)) {
-        cache[href] = fetchUrl(href);
+  // Load the stylesheets data
+  const allCSS: Array<string> = await Promise.all(
+    stylesheets.map(({ href }) => {
+      if (!(href in cachedStylesheets)) {
+        cachedStylesheets[href] = fetchUrl(href);
       }
 
-      return cache[href];
+      return cachedStylesheets[href];
     })
   );
 
   // Inject the elements as innerHTML in the newElementType element
-  elements.forEach((element: HTMLElement, idx: number) => {
-    const newElement: HTMLElement = document.createElement(newElementType);
-    newElement.innerHTML = elementsData[idx];
-    element.replaceWith(newElement);
+  stylesheets.forEach((stylesheet: HTMLLinkElement, idx: number) => {
+    const styleElement: HTMLStyleElement = document.createElement('style');
+    styleElement.innerHTML = allCSS[idx];
+    stylesheet.replaceWith(styleElement);
   });
 
-  return dom;
+  return dom.innerHTML;
 }
 
 function createNewDocElement(documentInnerHTML: string): HTMLElement {
@@ -98,7 +85,7 @@ function loadAndCachePages(links: Array<HTMLAnchorElement>): void {
       const data = await fetchUrl(href);
 
       if (data !== null) {
-        cachedPages[href] = inlineAllDependencies(createNewDocElement(data));
+        cachedPages[href] = inlineAllStyles(createNewDocElement(data));
       }
     }
   });
@@ -115,15 +102,34 @@ async function navigateTo(href: string): Promise<void> {
       window.location.href = href;
     } else {
       replacePage(href, page);
-      cachedPages[href] = inlineAllDependencies(createNewDocElement(page));
+      cachedPages[href] = inlineAllStyles(createNewDocElement(page));
     }
   }
 }
 
 function replacePage(href: string, page: string): void {
   document.documentElement.innerHTML = page;
+  executeDocumentScripts(document);
   history.pushState('', '', href);
   main();
+}
+
+function executeDocumentScripts(doc: Document): void {
+  const scripts: Array<HTMLScriptElement> = Array.from(
+    doc.querySelectorAll('script:not(.run-once-globally)')
+  );
+
+  scripts.map(async script => {
+    const newScript = doc.createElement('script');
+    let code = script.innerHTML;
+
+    if (script.src) {
+      code = await fetchUrl(script.src);
+    }
+
+    newScript.appendChild(doc.createTextNode(`(function(){${code}})()`));
+    script.replaceWith(newScript);
+  });
 }
 
 async function fetchUrl(url: string): Promise<string | null> {

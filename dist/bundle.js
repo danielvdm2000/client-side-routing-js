@@ -380,8 +380,8 @@ function hmrAcceptRun(bundle, id) {
 
 },{}],"c549420f29a961adf7d8ecf499743399":[function(require,module,exports) {
 const cachedPages = {};
-const cachedStylesheets = {}; // const cachedScripts: ICachedAssets = {};
-
+const cachedStylesheets = {};
+const cachedScripts = {};
 main();
 
 function main() {
@@ -389,7 +389,7 @@ function main() {
   const links = Array.from(document.querySelectorAll("a:not([target='_blank'])")); // Add current page to cache
 
   if (!(location.href in cachedPages)) {
-    cachedPages[location.href] = inlineAllDependencies(document.documentElement);
+    cachedPages[location.href] = inlineAllStyles(document.documentElement);
   } // Override the anchor click events
 
 
@@ -420,31 +420,25 @@ function customAnchorClickEvent(event) {
   }
 }
 
-async function inlineAllDependencies(dom) {
-  dom = await fetchAndInject(dom, 'link[rel="stylesheet"]', 'style', 'href', cachedStylesheets); //dom = await fetchAndInject(dom, 'script[src]', 'script', 'src', cachedScripts);
+async function inlineAllStyles(dom) {
+  const stylesheets = Array.from(dom.querySelectorAll('link[rel="stylesheet"]')); // Load the stylesheets data
 
-  return dom.innerHTML;
-}
-
-async function fetchAndInject(dom, selector, newElementType, src, cache = {}) {
-  const elements = Array.from(dom.querySelectorAll(selector)); // Load the elements data
-
-  const elementsData = await Promise.all(elements.map(element => {
-    const href = element[src];
-
-    if (!(href in cache)) {
-      cache[href] = fetchUrl(href);
+  const allCSS = await Promise.all(stylesheets.map(({
+    href
+  }) => {
+    if (!(href in cachedStylesheets)) {
+      cachedStylesheets[href] = fetchUrl(href);
     }
 
-    return cache[href];
+    return cachedStylesheets[href];
   })); // Inject the elements as innerHTML in the newElementType element
 
-  elements.forEach((element, idx) => {
-    const newElement = document.createElement(newElementType);
-    newElement.innerHTML = elementsData[idx];
-    element.replaceWith(newElement);
+  stylesheets.forEach((stylesheet, idx) => {
+    const styleElement = document.createElement('style');
+    styleElement.innerHTML = allCSS[idx];
+    stylesheet.replaceWith(styleElement);
   });
-  return dom;
+  return dom.innerHTML;
 }
 
 function createNewDocElement(documentInnerHTML) {
@@ -461,7 +455,7 @@ function loadAndCachePages(links) {
       const data = await fetchUrl(href);
 
       if (data !== null) {
-        cachedPages[href] = inlineAllDependencies(createNewDocElement(data));
+        cachedPages[href] = inlineAllStyles(createNewDocElement(data));
       }
     }
   });
@@ -478,15 +472,31 @@ async function navigateTo(href) {
       window.location.href = href;
     } else {
       replacePage(href, page);
-      cachedPages[href] = inlineAllDependencies(createNewDocElement(page));
+      cachedPages[href] = inlineAllStyles(createNewDocElement(page));
     }
   }
 }
 
 function replacePage(href, page) {
   document.documentElement.innerHTML = page;
+  executeDocumentScripts(document);
   history.pushState('', '', href);
   main();
+}
+
+function executeDocumentScripts(doc) {
+  const scripts = Array.from(doc.querySelectorAll('script:not(.run-once-globally)'));
+  scripts.map(async script => {
+    const newScript = doc.createElement('script');
+    let code = script.innerHTML;
+
+    if (script.src) {
+      code = await fetchUrl(script.src);
+    }
+
+    newScript.appendChild(doc.createTextNode(`(function(){${code}})()`));
+    script.replaceWith(newScript);
+  });
 }
 
 async function fetchUrl(url) {
