@@ -1,9 +1,8 @@
-import IAnchorMouseEvent from './interfaces/IAnchorMouseEvent';
 import ICachedAssets from './interfaces/ICachedAssets';
 
 const cachedPages: ICachedAssets = {};
 const cachedStylesheets: ICachedAssets = {};
-const cachedScripts: ICachedAssets = {};
+// const cachedScripts: ICachedAssets = {};
 
 main();
 function main(): void {
@@ -35,16 +34,16 @@ window.addEventListener('popstate', () => {
   navigateTo(location.href);
 });
 
-function customAnchorClickEvent(event: IAnchorMouseEvent): void {
-  if ('href' in event.target) {
-    if (event.target.host === location.host) {
-      // Internal link
-      event.preventDefault();
+// * the "this" parameter is just a way of defining the type of this.
+function customAnchorClickEvent(this: HTMLAnchorElement, event: MouseEvent): void {
+  if (event.ctrlKey) return;
+  if (!('href' in this)) return;
+  if (this.host !== location.host) return;
 
-      if (location.href !== event.target.href) {
-        navigateTo(event.target.href);
-      }
-    }
+  event.preventDefault();
+
+  if (location.href !== this.href) {
+    navigateTo(this.href);
   }
 }
 

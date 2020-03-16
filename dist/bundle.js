@@ -380,8 +380,8 @@ function hmrAcceptRun(bundle, id) {
 
 },{}],"c549420f29a961adf7d8ecf499743399":[function(require,module,exports) {
 const cachedPages = {};
-const cachedStylesheets = {};
-const cachedScripts = {};
+const cachedStylesheets = {}; // const cachedScripts: ICachedAssets = {};
+
 main();
 
 function main() {
@@ -407,18 +407,16 @@ function main() {
 
 window.addEventListener('popstate', () => {
   navigateTo(location.href);
-});
+}); // * the "this" parameter is just a way of defining the type of this.
 
 function customAnchorClickEvent(event) {
-  if ('href' in event.target) {
-    if (event.target.host === location.host) {
-      // Internal link
-      event.preventDefault();
+  if (event.ctrlKey) return;
+  if (!('href' in this)) return;
+  if (this.host !== location.host) return;
+  event.preventDefault();
 
-      if (location.href !== event.target.href) {
-        navigateTo(event.target.href);
-      }
-    }
+  if (location.href !== this.href) {
+    navigateTo(this.href);
   }
 }
 
