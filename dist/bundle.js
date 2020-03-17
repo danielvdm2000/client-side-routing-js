@@ -379,17 +379,27 @@ function hmrAcceptRun(bundle, id) {
 }
 
 },{}],"c549420f29a961adf7d8ecf499743399":[function(require,module,exports) {
-const cachedPages = {};
-const cachedStylesheets = {};
-const cachedScripts = {};
+"use strict";
+
+var _createDocument = _interopRequireDefault(require("./helpers/createDocument"));
+
+var _executeDocumentScripts = _interopRequireDefault(require("./helpers/executeDocumentScripts"));
+
+var _fetchText = _interopRequireDefault(require("./helpers/fetchText"));
+
+var _inlineAllDependencies = _interopRequireDefault(require("./helpers/inlineAllDependencies"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+const cachedAssets = {};
 main();
 
 function main() {
   const preLoadLinks = true;
   const links = Array.from(document.querySelectorAll("a:not([target='_blank'])")); // Add current page to cache
 
-  if (!(location.href in cachedPages)) {
-    cachedPages[location.href] = inlineAllStyles(document.documentElement);
+  if (!(location.href in cachedAssets)) {
+    cachedAssets[location.href] = (0, _inlineAllDependencies.default)((0, _createDocument.default)(document.documentElement.innerHTML), cachedAssets);
   } // Override the anchor click events
 
 
@@ -418,86 +428,98 @@ function customAnchorClickEvent(event) {
   }
 }
 
-async function inlineAllStyles(dom) {
-  const stylesheets = Array.from(dom.querySelectorAll('link[rel="stylesheet"]')); // Load the stylesheets data
-
-  const allCSS = await Promise.all(stylesheets.map(({
-    href
-  }) => {
-    if (!(href in cachedStylesheets)) {
-      cachedStylesheets[href] = fetchUrl(href);
-    }
-
-    return cachedStylesheets[href];
-  })); // Inject the elements as innerHTML in the newElementType element
-
-  stylesheets.forEach((stylesheet, idx) => {
-    const styleElement = document.createElement('style');
-    styleElement.innerHTML = allCSS[idx];
-    stylesheet.replaceWith(styleElement);
-  });
-  return dom.innerHTML;
-}
-
-function createNewDocElement(documentInnerHTML) {
-  const newDoc = document.implementation.createHTMLDocument();
-  newDoc.documentElement.innerHTML = documentInnerHTML;
-  return newDoc.documentElement;
-}
-
 function loadAndCachePages(links) {
   links.forEach(async ({
     href
   }) => {
-    if (!(href in cachedPages)) {
-      const data = await fetchUrl(href);
+    if (!(href in cachedAssets)) {
+      const data = await (0, _fetchText.default)(href);
 
       if (data !== null) {
-        cachedPages[href] = inlineAllStyles(createNewDocElement(data));
+        cachedAssets[href] = (0, _inlineAllDependencies.default)((0, _createDocument.default)(data), cachedAssets);
       }
     }
   });
 }
 
 async function navigateTo(href) {
-  if (href in cachedPages) {
-    const page = await Promise.resolve(cachedPages[href]);
+  if (href in cachedAssets) {
+    const page = await Promise.resolve(cachedAssets[href]);
     replacePage(href, page);
   } else {
-    const page = await fetchUrl(href);
+    const page = await (0, _fetchText.default)(href);
 
     if (page === null) {
       window.location.href = href;
     } else {
       replacePage(href, page);
-      cachedPages[href] = inlineAllStyles(createNewDocElement(page));
+      cachedAssets[href] = (0, _inlineAllDependencies.default)((0, _createDocument.default)(page), cachedAssets);
     }
   }
 }
 
 function replacePage(href, page) {
   document.documentElement.innerHTML = page;
-  executeDocumentScripts(document);
+  (0, _executeDocumentScripts.default)(document);
   history.pushState('', '', href);
   main();
 }
 
-function executeDocumentScripts(doc) {
-  const scripts = Array.from(doc.querySelectorAll('script:not(.run-once-globally)'));
-  scripts.map(async script => {
-    const newScript = doc.createElement('script');
-    let code = script.innerHTML;
+console.log('Client side routing script ran');
+},{"./helpers/inlineAllDependencies":"63f8f1342b2f8225b6365d3a23f80889","./helpers/fetchText":"72009e7d79b639f66dc5da3b044d840b","./helpers/executeDocumentScripts":"f0b38aab471b7bf00d8f085e3138513a","./helpers/createDocument":"905126a305e1f676cbec5db4e5b6aad2"}],"63f8f1342b2f8225b6365d3a23f80889":[function(require,module,exports) {
+"use strict";
 
-    if (script.src) {
-      code = await fetchUrl(script.src);
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+
+var _fetchText = _interopRequireDefault(require("./fetchText"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+async function inlineAllDependencies(doc, cachedAssets) {
+  const stylesheets = Array.from(doc.querySelectorAll('link[rel="stylesheet"]'));
+  const scripts = Array.from(doc.querySelectorAll('script[src]:not(.run-once-globally)'));
+  const resolvedAssets = await Promise.all([...getAssets(stylesheets, 'href', cachedAssets), ...getAssets(scripts, 'src', cachedAssets)]);
+  const styleCount = stylesheets.length;
+  const scriptCount = scripts.length;
+  inlineAsset(stylesheets, 'style', resolvedAssets.slice(0, styleCount));
+  inlineAsset(scripts, 'script', resolvedAssets.slice(styleCount, styleCount + scriptCount));
+  return doc.documentElement.innerHTML;
+}
+
+function getAssets(elements, srcAttribute, cachedAssets) {
+  return elements.map(element => {
+    const src = element[srcAttribute];
+
+    if (!(src in cachedAssets)) {
+      cachedAssets[src] = (0, _fetchText.default)(src);
     }
 
-    newScript.appendChild(doc.createTextNode(`(function(){${code}})()`));
-    script.replaceWith(newScript);
+    return cachedAssets[src];
   });
 }
 
-async function fetchUrl(url) {
+function inlineAsset(elements, newElementType, assets) {
+  elements.forEach((element, idx) => {
+    const newElement = document.createElement(newElementType);
+    newElement.innerHTML = assets[idx];
+    element.replaceWith(newElement);
+  });
+}
+
+var _default = inlineAllDependencies;
+exports.default = _default;
+},{"./fetchText":"72009e7d79b639f66dc5da3b044d840b"}],"72009e7d79b639f66dc5da3b044d840b":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+
+async function fetchText(url) {
   return fetch(url).then(response => {
     return response.text();
   }).catch(error => {
@@ -506,7 +528,44 @@ async function fetchUrl(url) {
   });
 }
 
-console.log('Client side routing script ran');
+var _default = fetchText;
+exports.default = _default;
+},{}],"f0b38aab471b7bf00d8f085e3138513a":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+
+function executeDocumentScripts(doc) {
+  const scripts = Array.from(doc.querySelectorAll('script:not(.run-once-globally)'));
+  scripts.forEach(script => {
+    const newScript = doc.createElement('script');
+    let code = script.innerHTML;
+    newScript.appendChild(doc.createTextNode(`(function(){${code}})()`));
+    script.replaceWith(newScript);
+  });
+}
+
+var _default = executeDocumentScripts;
+exports.default = _default;
+},{}],"905126a305e1f676cbec5db4e5b6aad2":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+
+function createDocument(documentInnerHTML) {
+  const doc = document.implementation.createHTMLDocument();
+  doc.documentElement.innerHTML = documentInnerHTML;
+  return doc;
+}
+
+var _default = createDocument;
+exports.default = _default;
 },{}]},{},["924c4e4a62d2bafff85e7539e6e8fac8","c549420f29a961adf7d8ecf499743399"], null)
 
 //# sourceMappingURL=bundle.js.map

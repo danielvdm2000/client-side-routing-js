@@ -1,8 +1,10 @@
+import createDocument from './helpers/createDocument';
+import executeDocumentScripts from './helpers/executeDocumentScripts';
+import fetchText from './helpers/fetchText';
+import inlineAllDependencies from './helpers/inlineAllDependencies';
 import ICachedAssets from './interfaces/ICachedAssets';
 
-const cachedPages: ICachedAssets = {};
-const cachedStylesheets: ICachedAssets = {};
-const cachedScripts: ICachedAssets = {};
+const cachedAssets: ICachedAssets = {};
 
 main();
 function main(): void {
@@ -12,8 +14,11 @@ function main(): void {
   );
 
   // Add current page to cache
-  if (!(location.href in cachedPages)) {
-    cachedPages[location.href] = inlineAllStyles(document.documentElement);
+  if (!(location.href in cachedAssets)) {
+    cachedAssets[location.href] = inlineAllDependencies(
+      createDocument(document.documentElement.innerHTML),
+      cachedAssets
+    );
   }
 
   // Override the anchor click events
@@ -45,62 +50,30 @@ function customAnchorClickEvent(this: HTMLAnchorElement, event: MouseEvent): voi
   }
 }
 
-async function inlineAllStyles(dom: HTMLElement): Promise<string> {
-  const stylesheets: Array<HTMLLinkElement> = Array.from(
-    dom.querySelectorAll('link[rel="stylesheet"]')
-  );
-
-  // Load the stylesheets data
-  const allCSS: Array<string> = await Promise.all(
-    stylesheets.map(({ href }) => {
-      if (!(href in cachedStylesheets)) {
-        cachedStylesheets[href] = fetchUrl(href);
-      }
-
-      return cachedStylesheets[href];
-    })
-  );
-
-  // Inject the elements as innerHTML in the newElementType element
-  stylesheets.forEach((stylesheet: HTMLLinkElement, idx: number) => {
-    const styleElement: HTMLStyleElement = document.createElement('style');
-    styleElement.innerHTML = allCSS[idx];
-    stylesheet.replaceWith(styleElement);
-  });
-
-  return dom.innerHTML;
-}
-
-function createNewDocElement(documentInnerHTML: string): HTMLElement {
-  const newDoc: HTMLDocument = document.implementation.createHTMLDocument();
-  newDoc.documentElement.innerHTML = documentInnerHTML;
-  return newDoc.documentElement;
-}
-
 function loadAndCachePages(links: Array<HTMLAnchorElement>): void {
   links.forEach(async ({ href }) => {
-    if (!(href in cachedPages)) {
-      const data = await fetchUrl(href);
+    if (!(href in cachedAssets)) {
+      const data = await fetchText(href);
 
       if (data !== null) {
-        cachedPages[href] = inlineAllStyles(createNewDocElement(data));
+        cachedAssets[href] = inlineAllDependencies(createDocument(data), cachedAssets);
       }
     }
   });
 }
 
 async function navigateTo(href: string): Promise<void> {
-  if (href in cachedPages) {
-    const page = await Promise.resolve(cachedPages[href]);
+  if (href in cachedAssets) {
+    const page = await Promise.resolve(cachedAssets[href]);
     replacePage(href, page);
   } else {
-    const page = await fetchUrl(href);
+    const page = await fetchText(href);
 
     if (page === null) {
       window.location.href = href;
     } else {
       replacePage(href, page);
-      cachedPages[href] = inlineAllStyles(createNewDocElement(page));
+      cachedAssets[href] = inlineAllDependencies(createDocument(page), cachedAssets);
     }
   }
 }
@@ -110,35 +83,6 @@ function replacePage(href: string, page: string): void {
   executeDocumentScripts(document);
   history.pushState('', '', href);
   main();
-}
-
-function executeDocumentScripts(doc: Document): void {
-  const scripts: Array<HTMLScriptElement> = Array.from(
-    doc.querySelectorAll('script:not(.run-once-globally)')
-  );
-
-  scripts.map(async script => {
-    const newScript = doc.createElement('script');
-    let code = script.innerHTML;
-
-    if (script.src) {
-      code = await fetchUrl(script.src);
-    }
-
-    newScript.appendChild(doc.createTextNode(`(function(){${code}})()`));
-    script.replaceWith(newScript);
-  });
-}
-
-async function fetchUrl(url: string): Promise<string | null> {
-  return fetch(url)
-    .then(response => {
-      return response.text();
-    })
-    .catch(error => {
-      console.log(error);
-      return null;
-    });
 }
 
 console.log('Client side routing script ran');
