@@ -39,11 +39,18 @@ window.addEventListener('popstate', () => {
 
 // * the "this" parameter is just a way of defining the type of this.
 function customAnchorClickEvent(this: HTMLAnchorElement, event: MouseEvent): void {
-  const samePageNavigation = cleanPageHref(this.href) === cleanPageHref(location.href);
-
-  if (!event.ctrlKey && validLinkToFetch(this) && !samePageNavigation) {
-    event.preventDefault();
-    navigateTo(this.href);
+  if (!event.ctrlKey && validLinkToFetch(this)) {
+    if (cleanPageHref(this.href) === cleanPageHref(location.href) && this.href.includes('#')) {
+      // Navigate to a fragment identifier on the same page (default browser behavior)
+    } else if (cleanPageHref(this.href) !== cleanPageHref(location.href)) {
+      // Navigate to a new page
+      event.preventDefault();
+      navigateTo(this.href);
+    } else {
+      // Navigate to the same page
+      event.preventDefault();
+      history.pushState('', '', this.href);
+    }
   }
 }
 
