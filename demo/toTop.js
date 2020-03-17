@@ -9,13 +9,8 @@ window.onscroll = function() {
 
 function scrollFunction() {
   if (document.body.scrollTop > 20 || document.documentElement.scrollTop > 20) {
-    toTopButton.style.display = 'block';
+    toTopButton.style.display = 'flex';
   } else {
     toTopButton.style.display = 'none';
   }
 }
-
-toTopButton.addEventListener('click', function() {
-  document.body.scrollTop = 0;
-  document.documentElement.scrollTop = 0;
-});

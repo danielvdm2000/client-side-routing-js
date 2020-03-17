@@ -68,6 +68,8 @@ main {
 
 #toTop {
     display: none;
+    align-items: center;
+    justify-content: center;
     position: fixed;
     bottom: 20px;
     right: 20px;

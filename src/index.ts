@@ -14,8 +14,8 @@ function main(): void {
   );
 
   // Add current page to cache
-  if (!(location.href in cachedAssets)) {
-    cachedAssets[location.href] = inlineAllDependencies(
+  if (!(cleanPageHref(location.href) in cachedAssets)) {
+    cachedAssets[cleanPageHref(location.href)] = inlineAllDependencies(
       createDocument(document.documentElement.innerHTML),
       cachedAssets
     );
@@ -39,41 +39,52 @@ window.addEventListener('popstate', () => {
 
 // * the "this" parameter is just a way of defining the type of this.
 function customAnchorClickEvent(this: HTMLAnchorElement, event: MouseEvent): void {
-  if (event.ctrlKey) return;
-  if (!('href' in this)) return;
-  if (this.host !== location.host) return;
+  const samePageNavigation = cleanPageHref(this.href) === cleanPageHref(location.href);
 
-  event.preventDefault();
-
-  if (location.href !== this.href) {
+  if (!event.ctrlKey && validLinkToFetch(this) && !samePageNavigation) {
+    event.preventDefault();
     navigateTo(this.href);
   }
 }
 
 function loadAndCachePages(links: Array<HTMLAnchorElement>): void {
-  links.forEach(async ({ href }) => {
-    if (!(href in cachedAssets)) {
-      const data = await fetchText(href);
+  links.forEach(async link => {
+    if (!(cleanPageHref(link.href) in cachedAssets) && validLinkToFetch(link)) {
+      const data = await fetchText(link.href);
 
       if (data !== null) {
-        cachedAssets[href] = inlineAllDependencies(createDocument(data), cachedAssets);
+        cachedAssets[cleanPageHref(link.href)] = inlineAllDependencies(
+          createDocument(data),
+          cachedAssets
+        );
       }
     }
   });
 }
 
+function validLinkToFetch(link: HTMLAnchorElement): boolean {
+  return 'href' in link && link.host === location.host;
+}
+
+// Remove fragment identifier
+function cleanPageHref(href: string) {
+  return href.split('#')[0];
+}
+
 async function navigateTo(href: string): Promise<void> {
-  if (href in cachedAssets) {
-    const page = await Promise.resolve(cachedAssets[href]);
+  if (cleanPageHref(href) in cachedAssets) {
+    // Navigate to a cached page
+    const page = await Promise.resolve(cachedAssets[cleanPageHref(href)]);
     replacePage(href, page);
   } else {
+    // Fetch page and navigate to it
     const page = await fetchText(href);
 
     if (page === null) {
       window.location.href = href;
     } else {
       replacePage(href, page);
-      cachedAssets[href] = inlineAllDependencies(createDocument(page), cachedAssets);
+      cachedAssets[cleanPageHref(href)] = inlineAllDependencies(createDocument(page), cachedAssets);
     }
   }
 }
