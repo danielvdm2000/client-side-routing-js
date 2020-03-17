@@ -398,9 +398,7 @@ function main() {
   }); // Preload pages
 
   if (preLoadLinks) {
-    window.addEventListener('load', () => {
-      loadAndCachePages(links);
-    });
+    setTimeout(() => loadAndCachePages(links), 10);
   }
 } // Navigate to past page on back button
 
